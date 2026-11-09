@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inspection de surface — temps réel</title>
+<style>
+  :root { --bg:#0f1418; --panel:#182027; --text:#e6edf3; --muted:#8b98a5; --ok:#3fb950; --ko:#f85149; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:14px 20px; border-bottom:1px solid #26313a; display:flex; gap:12px; align-items:center; }
+  header h1 { font-size:17px; margin:0; font-weight:600; }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--muted); }
+  main { display:grid; grid-template-columns: minmax(0,2fr) minmax(280px,1fr); gap:16px; padding:16px 20px; }
+  .panel { background:var(--panel); border-radius:8px; padding:14px; }
+  img { width:100%; max-height:62vh; object-fit:contain; border-radius:6px; background:#000; display:block; }
+  .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:12px; }
+  .stat .v { font-size:20px; font-variant-numeric: tabular-nums; }
+  .stat .k { font-size:12px; color:var(--muted); }
+  h2 { font-size:14px; margin:0 0 10px; color:var(--muted); font-weight:500; }
+  ul { list-style:none; margin:0; padding:0; max-height:70vh; overflow:auto; }
+  li { padding:8px 10px; border-left:3px solid var(--ko); background:#1f1416; margin-bottom:6px; border-radius:4px; font-size:13px; }
+  li.new { animation: flash 1s; }
+  @keyframes flash { from { background:#5a1d1d; } to { background:#1f1416; } }
+  @media (max-width: 800px) { main { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header><span class="dot" id="dot"></span><h1>Inspection de surface — temps réel</h1></header>
+<main>
+  <section class="panel">
+    <img src="/video.mjpg" alt="Flux annoté">
+    <div class="stats">
+      <div class="stat"><div class="v" id="fps">–</div><div class="k">images / s</div></div>
+      <div class="stat"><div class="v" id="lat">–</div><div class="k">latence p95 (ms)</div></div>
+      <div class="stat"><div class="v" id="score">–</div><div class="k">score / seuil</div></div>
+    </div>
+  </section>
+  <aside class="panel">
+    <h2>Alertes (<span id="count">0</span>)</h2>
+    <ul id="alerts"></ul>
+  </aside>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const list = $("alerts");
+function addAlert(a, isNew) {
+  const li = document.createElement("li");
+  if (isNew) li.className = "new";
+  li.textContent = `${new Date(a.timestamp * 1000).toLocaleTimeString()} — image ${a.frame_id} — score ${a.score.toFixed(2)}`;
+  list.prepend(li);
+  $("count").textContent = list.children.length;
+}
+fetch("/api/alerts").then(r => r.json()).then(xs => xs.reverse().forEach(a => addAlert(a, false)));
+async function poll() {
+  try {
+    const s = await (await fetch("/api/stats")).json();
+    $("fps").textContent = s.fps;
+    $("lat").textContent = s.latency_ms_p95;
+    $("score").textContent = `${s.last_score.toFixed(2)} / ${s.threshold.toFixed(2)}`;
+    $("dot").style.background = s.connected ? "var(--ok)" : "var(--ko)";
+  } catch { $("dot").style.background = "var(--ko)"; }
+}
+setInterval(poll, 1000); poll();
+function connect() {
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+  ws.onmessage = e => addAlert(JSON.parse(e.data), true);
+  ws.onclose = () => setTimeout(connect, 2000);
+}
+connect();
+</script>
+</body>
+</html>

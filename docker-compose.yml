@@ -1,0 +1,26 @@
+# Full demo: RTSP server + simulated industrial camera + inspection service.
+#   1. python scripts/make_demo_video.py   (creates demo/line1.mp4)
+#   2. docker compose up --build
+#   3. open http://localhost:8000
+services:
+  rtsp:
+    image: bluenviron/mediamtx:latest
+    ports: ["8554:8554"]
+
+  camera:  # loops the demo video into the RTSP server, like a camera on a production line
+    image: linuxserver/ffmpeg:latest
+    depends_on: [rtsp]
+    volumes: ["./demo:/demo:ro"]
+    command: >
+      -re -stream_loop -1 -i /demo/line1.mp4
+      -c:v libx264 -preset veryfast -tune zerolatency -g 25
+      -f rtsp -rtsp_transport tcp rtsp://rtsp:8554/line1
+    restart: unless-stopped
+
+  inspector:
+    build: .
+    depends_on: [camera]
+    environment:
+      STREAM_SOURCE: rtsp://rtsp:8554/line1
+    ports: ["8000:8000"]
+    restart: unless-stopped

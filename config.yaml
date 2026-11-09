@@ -1,0 +1,22 @@
+model:
+  image_size: 128      # tile size seen by the network
+  input_size: 128      # = image_size: whole frame down-scaled (best here). 256 = 2x2 full-res tiles
+  latent_channels: 64
+  weights: models/autoencoder.pt
+  onnx: models/autoencoder.onnx
+  threshold_file: models/threshold.json
+
+stream:
+  source: rtsp://localhost:8554/line1   # overridden by STREAM_SOURCE in Docker
+  reconnect_delay_s: 2.0
+  roi: null                             # [x, y, w, h] to inspect only part of the frame
+
+alerts:
+  consecutive_frames: 3                 # debounce
+  cooldown_s: 5.0
+  history_size: 100
+
+server:
+  host: 0.0.0.0
+  port: 8000
+  backend: onnx                         # onnx (deployment) or torch (reference)
